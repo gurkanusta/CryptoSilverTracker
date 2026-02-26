@@ -1,0 +1,171 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto & Gold Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .price-container {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            flex: 1;
+            background: #2c3e50;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+            .card h3 {
+                margin: 0 0 10px 0;
+                text-transform: capitalize;
+            }
+
+            .card p {
+                margin: 0;
+                font-size: 24px;
+                font-weight: bold;
+            }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        select {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+
+        canvas {
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Live Prices</h2>
+        <div class="price-container" id="priceContainer">
+            Loading prices...
+        </div>
+
+        <h2>Market Chart</h2>
+        <div class="controls">
+            <select id="coinSelect" onchange="loadChart()">
+                <option value="bitcoin">Bitcoin</option>
+                <option value="ethereum">Ethereum</option>
+                <option value="tether-gold">Gold (Tether Gold)</option>
+            </select>
+            <select id="daySelect" onchange="loadChart()">
+                <option value="1">1 Day</option>
+                <option value="7">7 Days</option>
+                <option value="30">30 Days</option>
+            </select>
+        </div>
+
+        <canvas id="marketChart"></canvas>
+    </div>
+
+    <script>
+        let chartInstance = null;
+
+        async function loadPrices() {
+            try {
+                const response = await fetch('/api/coins/prices');
+                const data = await response.json();
+
+                const container = document.getElementById('priceContainer');
+                container.innerHTML = '';
+
+                data.forEach(coin => {
+                    container.innerHTML += `
+                        <div class="card">
+                            <h3>${coin.id.replace('-', ' ')}</h3>
+                            <p>$${coin.currentPrice.toLocaleString()}</p>
+                        </div>
+                    `;
+                });
+            } catch (error) {
+                console.error("Error loading prices:", error);
+            }
+        }
+
+        async function loadChart() {
+            const coinId = document.getElementById('coinSelect').value;
+            const days = document.getElementById('daySelect').value;
+
+            try {
+                const response = await fetch(`/api/coins/history/${coinId}/${days}`);
+                const data = await response.json();
+
+                const labels = data.prices.map(p => {
+                    const date = new Date(p[0]);
+                    return days == 1 ? date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : date.toLocaleDateString();
+                });
+
+                const prices = data.prices.map(p => p[1]);
+
+                if (chartInstance) {
+                    chartInstance.destroy();
+                }
+
+                const ctx = document.getElementById('marketChart').getContext('2d');
+                chartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: `${coinId.replace('-', ' ').toUpperCase()} Price (USD)`,
+                            data: prices,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true,
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        interaction: { intersect: false, mode: 'index' }
+                    }
+                });
+            } catch (error) {
+                console.error("Error loading chart:", error);
+            }
+        }
+
+        
+        loadPrices();
+        loadChart();
+
+        
+        setInterval(loadPrices, 60000);
+    </script>
+</body>
+</html>
