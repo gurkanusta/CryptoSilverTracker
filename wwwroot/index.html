@@ -121,20 +121,25 @@
 </head>
 <body>
     <div class="container">
-        <h2>Canlı Piyasa Fiyatları</h2>
+        <h2>Live Market Prices</h2>
         <div class="price-grid" id="priceContainer">
-            <p>Veriler yükleniyor...</p>
+            <p>Loading data...</p>
         </div>
 
         <div class="section-box">
-            <h2>Kişisel Portföy (Cüzdan)</h2>
-            <div class="controls" id="portfolioInputs">
+            <h2>Personal Portfolio (Wallet)</h2>
+            <div style="display: flex; gap: 40px; flex-wrap: wrap; align-items: center;">
+                <div class="controls" id="portfolioInputs" style="flex: 1; min-width: 250px;">
+                </div>
+                <div style="flex: 1; max-width: 300px; text-align: center;">
+                    <canvas id="portfolioChart"></canvas>
+                    <div class="portfolio-total" id="portfolioTotal">Total: $0.00</div>
+                </div>
             </div>
-            <div class="portfolio-total" id="portfolioTotal">Toplam: $0.00</div>
         </div>
 
         <div class="section-box">
-            <h2>Piyasa Analiz Grafiği</h2>
+            <h2>Market Analysis Chart</h2>
             <div class="controls">
                 <select id="coinSelect" onchange="loadChart()">
                     <option value="bitcoin">Bitcoin (BTC)</option>
@@ -146,9 +151,9 @@
                     <option value="kinesis-silver">Kinesis Silver (KAG)</option>
                 </select>
                 <select id="daySelect" onchange="loadChart()">
-                    <option value="1">Son 24 Saat</option>
-                    <option value="7">Son 7 Gün</option>
-                    <option value="30">Son 30 Gün</option>
+                    <option value="1">Last 24 Hours</option>
+                    <option value="7">Last 7 Days</option>
+                    <option value="30">Last 30 Days</option>
                 </select>
             </div>
             <canvas id="marketChart"></canvas>
@@ -157,75 +162,124 @@
 
     <script>
         let chartInstance = null;
+        let portfolioChartInstance = null;
         let currentPrices = {};
 
         async function loadPrices() {
-            const response = await fetch('/api/coins/prices');
-            const data = await response.json();
+            try {
+                const response = await fetch('/api/coins/prices');
+                const data = await response.json();
 
-            const container = document.getElementById('priceContainer');
-            const portfolioInputs = document.getElementById('portfolioInputs');
+                const container = document.getElementById('priceContainer');
+                const portfolioInputs = document.getElementById('portfolioInputs');
 
-            if (container.innerHTML.includes('yükleniyor')) {
-                container.innerHTML = '';
-                portfolioInputs.innerHTML = '';
-            }
+                if (container.innerHTML.includes('Loading')) {
+                    container.innerHTML = '';
+                    portfolioInputs.innerHTML = '';
+                }
 
-            data.forEach(coin => {
-                currentPrices[coin.id] = coin.currentPrice;
-                let displayName = coin.id.replace('-', ' ');
-                let changeClass = coin.change24h >= 0 ? 'up' : 'down';
-                let changeSign = coin.change24h >= 0 ? '+' : '';
+                data.forEach(coin => {
+                    currentPrices[coin.id] = coin.currentPrice;
+                    let displayName = coin.id.replace('-', ' ');
+                    let changeClass = coin.change24h >= 0 ? 'up' : 'down';
+                    let changeSign = coin.change24h >= 0 ? '+' : '';
 
-                
-                let existingCard = document.getElementById(`card-${coin.id}`);
-                let cardHtml = `
+                    let existingCard = document.getElementById(`card-${coin.id}`);
+                    let cardHtml = `
                             <h3>${displayName}</h3>
                             <p>$${coin.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
-                            <div class="change ${changeClass}">${changeSign}${coin.change24h.toFixed(2)}% (24s)</div>
+                            <div class="change ${changeClass}">${changeSign}${coin.change24h.toFixed(2)}% (24h)</div>
                         `;
 
-                if (existingCard) existingCard.innerHTML = cardHtml;
-                else container.innerHTML += `<div class="card" id="card-${coin.id}">${cardHtml}</div>`;
+                    if (existingCard) {
+                        existingCard.innerHTML = cardHtml;
+                    } else {
+                        container.innerHTML += `<div class="card" id="card-${coin.id}">${cardHtml}</div>`;
+                    }
 
-                
-                if (!document.getElementById(`input-${coin.id}`)) {
-                    portfolioInputs.innerHTML += `
+                    if (!document.getElementById(`input-${coin.id}`)) {
+                        portfolioInputs.innerHTML += `
                                 <div>
-                                    <label style="display:block; margin-bottom:5px; color:#94a3b8; font-size:0.9em;">${displayName} Miktarı</label>
+                                    <label style="display:block; margin-bottom:5px; color:#94a3b8; font-size:0.9em;">${displayName} Amount</label>
                                     <input type="number" id="input-${coin.id}" value="0" step="any" oninput="calculatePortfolio()">
                                 </div>
                             `;
-                }
-            });
-            calculatePortfolio();
+                    }
+                });
+                calculatePortfolio();
+            } catch (error) {
+                console.error("Error loading prices:", error);
+            }
         }
 
         function calculatePortfolio() {
             let total = 0;
+            let chartLabels = [];
+            let chartData = [];
+
             for (let coinId in currentPrices) {
                 let amount = parseFloat(document.getElementById(`input-${coinId}`)?.value || 0);
-                total += amount * currentPrices[coinId];
+                let valueInUsd = amount * currentPrices[coinId];
+                total += valueInUsd;
+
+                if (valueInUsd > 0) {
+                    chartLabels.push(coinId.replace('-', ' ').toUpperCase());
+                    chartData.push(valueInUsd);
+                }
             }
-            document.getElementById('portfolioTotal').innerText = `Toplam: $${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+            document.getElementById('portfolioTotal').innerText = `Total: $${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            updatePortfolioChart(chartLabels, chartData);
+        }
+
+        function updatePortfolioChart(labels, data) {
+            if (portfolioChartInstance) {
+                portfolioChartInstance.destroy();
+            }
+
+            if (data.length === 0) return;
+
+            const ctx = document.getElementById('portfolioChart').getContext('2d');
+            portfolioChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#14b8a6', '#f43f5e', '#eab308'],
+                        borderWidth: 2,
+                        borderColor: '#1e293b'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#f8fafc' } }
+                    }
+                }
+            });
         }
 
         async function loadChart() {
-            const coinId = document.getElementById('coinSelect').value;
-            const days = document.getElementById('daySelect').value;
-            const response = await fetch(`/api/coins/history/${coinId}/${days}`);
-            const data = await response.json();
+            try {
+                const coinId = document.getElementById('coinSelect').value;
+                const days = document.getElementById('daySelect').value;
+                const response = await fetch(`/api/coins/history/${coinId}/${days}`);
+                const data = await response.json();
 
-            const labels = data.prices.map(p => new Date(p[0]).toLocaleDateString());
-            const prices = data.prices.map(p => p[1]);
+                const labels = data.prices.map(p => new Date(p[0]).toLocaleDateString());
+                const prices = data.prices.map(p => p[1]);
 
-            if (chartInstance) chartInstance.destroy();
-            const ctx = document.getElementById('marketChart').getContext('2d');
-            chartInstance = new Chart(ctx, {
-                type: 'line',
-                data: { labels: labels, datasets: [{ label: `${coinId} Fiyatı`, data: prices, borderColor: '#3b82f6', tension: 0.3 }] },
-                options: { responsive: true }
-            });
+                if (chartInstance) chartInstance.destroy();
+                const ctx = document.getElementById('marketChart').getContext('2d');
+                chartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels: labels, datasets: [{ label: `${coinId.replace('-', ' ').toUpperCase()} Price (USD)`, data: prices, borderColor: '#3b82f6', tension: 0.3 }] },
+                    options: { responsive: true }
+                });
+            } catch (error) {
+                console.error("Error loading chart:", error);
+            }
         }
 
         loadPrices();
