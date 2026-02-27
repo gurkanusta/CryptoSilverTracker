@@ -11,6 +11,8 @@
             --card-bg: #1e293b;
             --text: #f8fafc;
             --accent: #3b82f6;
+            --green: #10b981;
+            --red: #ef4444;
         }
 
         body {
@@ -30,6 +32,7 @@
             color: #e2e8f0;
             border-bottom: 2px solid var(--card-bg);
             padding-bottom: 10px;
+            margin-top: 40px;
         }
 
         .price-grid {
@@ -44,14 +47,8 @@
             padding: 25px;
             border-radius: 12px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
-            transition: transform 0.2s;
             border: 1px solid #334155;
         }
-
-            .card:hover {
-                transform: translateY(-5px);
-                border-color: var(--accent);
-            }
 
             .card h3 {
                 margin: 0 0 10px 0;
@@ -61,17 +58,31 @@
             }
 
             .card p {
-                margin: 0;
+                margin: 0 0 5px 0;
                 font-size: 1.8em;
                 font-weight: 700;
-                color: #10b981;
+                color: #f8fafc;
             }
 
-        .chart-section {
+        .change {
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+            .change.up {
+                color: var(--green);
+            }
+
+            .change.down {
+                color: var(--red);
+            }
+
+        .section-box {
             background: var(--card-bg);
             padding: 25px;
             border-radius: 12px;
             border: 1px solid #334155;
+            margin-bottom: 40px;
         }
 
         .controls {
@@ -81,7 +92,7 @@
             flex-wrap: wrap;
         }
 
-        select {
+        select, input {
             background: #0f172a;
             color: white;
             padding: 12px;
@@ -89,12 +100,18 @@
             border: 1px solid #334155;
             font-size: 16px;
             outline: none;
-            cursor: pointer;
         }
 
-            select:focus {
-                border-color: var(--accent);
-            }
+        input {
+            width: 150px;
+        }
+
+        .portfolio-total {
+            font-size: 2em;
+            color: var(--accent);
+            font-weight: bold;
+            margin-top: 15px;
+        }
 
         canvas {
             max-width: 100%;
@@ -109,7 +126,14 @@
             <p>Veriler yükleniyor...</p>
         </div>
 
-        <div class="chart-section">
+        <div class="section-box">
+            <h2>Kişisel Portföy (Cüzdan)</h2>
+            <div class="controls" id="portfolioInputs">
+            </div>
+            <div class="portfolio-total" id="portfolioTotal">Toplam: $0.00</div>
+        </div>
+
+        <div class="section-box">
             <h2>Piyasa Analiz Grafiği</h2>
             <div class="controls">
                 <select id="coinSelect" onchange="loadChart()">
@@ -117,9 +141,9 @@
                     <option value="ethereum">Ethereum (ETH)</option>
                     <option value="solana">Solana (SOL)</option>
                     <option value="ripple">Ripple (XRP)</option>
-                    <option value="tether-gold">Tether Gold (XAUT - Altın)</option>
-                    <option value="paxg">PAX Gold (PAXG - Altın)</option>
-                    <option value="kinesis-silver">Kinesis Silver (KAG - Gümüş)</option>
+                    <option value="tether-gold">Tether Gold (XAUT)</option>
+                    <option value="paxg">PAX Gold (PAXG)</option>
+                    <option value="kinesis-silver">Kinesis Silver (KAG)</option>
                 </select>
                 <select id="daySelect" onchange="loadChart()">
                     <option value="1">Son 24 Saat</option>
@@ -133,76 +157,75 @@
 
     <script>
         let chartInstance = null;
+        let currentPrices = {};
 
         async function loadPrices() {
-            try {
-                const response = await fetch('/api/coins/prices');
-                const data = await response.json();
+            const response = await fetch('/api/coins/prices');
+            const data = await response.json();
 
-                const container = document.getElementById('priceContainer');
+            const container = document.getElementById('priceContainer');
+            const portfolioInputs = document.getElementById('portfolioInputs');
+
+            if (container.innerHTML.includes('yükleniyor')) {
                 container.innerHTML = '';
+                portfolioInputs.innerHTML = '';
+            }
 
-                data.forEach(coin => {
-                    let displayName = coin.id.replace('-', ' ');
-                    container.innerHTML += `
-                                <div class="card">
-                                    <h3>${displayName}</h3>
-                                    <p>$${coin.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
+            data.forEach(coin => {
+                currentPrices[coin.id] = coin.currentPrice;
+                let displayName = coin.id.replace('-', ' ');
+                let changeClass = coin.change24h >= 0 ? 'up' : 'down';
+                let changeSign = coin.change24h >= 0 ? '+' : '';
+
+                
+                let existingCard = document.getElementById(`card-${coin.id}`);
+                let cardHtml = `
+                            <h3>${displayName}</h3>
+                            <p>$${coin.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
+                            <div class="change ${changeClass}">${changeSign}${coin.change24h.toFixed(2)}% (24s)</div>
+                        `;
+
+                if (existingCard) existingCard.innerHTML = cardHtml;
+                else container.innerHTML += `<div class="card" id="card-${coin.id}">${cardHtml}</div>`;
+
+                
+                if (!document.getElementById(`input-${coin.id}`)) {
+                    portfolioInputs.innerHTML += `
+                                <div>
+                                    <label style="display:block; margin-bottom:5px; color:#94a3b8; font-size:0.9em;">${displayName} Miktarı</label>
+                                    <input type="number" id="input-${coin.id}" value="0" step="any" oninput="calculatePortfolio()">
                                 </div>
                             `;
-                });
-            } catch (error) {
-                console.error("Fiyatlar çekilemedi:", error);
+                }
+            });
+            calculatePortfolio();
+        }
+
+        function calculatePortfolio() {
+            let total = 0;
+            for (let coinId in currentPrices) {
+                let amount = parseFloat(document.getElementById(`input-${coinId}`)?.value || 0);
+                total += amount * currentPrices[coinId];
             }
+            document.getElementById('portfolioTotal').innerText = `Toplam: $${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }
 
         async function loadChart() {
             const coinId = document.getElementById('coinSelect').value;
             const days = document.getElementById('daySelect').value;
+            const response = await fetch(`/api/coins/history/${coinId}/${days}`);
+            const data = await response.json();
 
-            try {
-                const response = await fetch(`/api/coins/history/${coinId}/${days}`);
-                const data = await response.json();
+            const labels = data.prices.map(p => new Date(p[0]).toLocaleDateString());
+            const prices = data.prices.map(p => p[1]);
 
-                const labels = data.prices.map(p => {
-                    const date = new Date(p[0]);
-                    return days == 1 ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : date.toLocaleDateString();
-                });
-
-                const prices = data.prices.map(p => p[1]);
-
-                if (chartInstance) chartInstance.destroy();
-
-                const ctx = document.getElementById('marketChart').getContext('2d');
-                chartInstance = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: `${coinId.replace('-', ' ').toUpperCase()} Fiyatı (USD)`,
-                            data: prices,
-                            borderColor: '#3b82f6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                            borderWidth: 3,
-                            pointRadius: 0,
-                            pointHoverRadius: 6,
-                            fill: true,
-                            tension: 0.3
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: { legend: { labels: { color: '#f8fafc' } } },
-                        scales: {
-                            x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
-                            y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
-                        },
-                        interaction: { intersect: false, mode: 'index' }
-                    }
-                });
-            } catch (error) {
-                console.error("Grafik verisi çekilemedi:", error);
-            }
+            if (chartInstance) chartInstance.destroy();
+            const ctx = document.getElementById('marketChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { labels: labels, datasets: [{ label: `${coinId} Fiyatı`, data: prices, borderColor: '#3b82f6', tension: 0.3 }] },
+                options: { responsive: true }
+            });
         }
 
         loadPrices();

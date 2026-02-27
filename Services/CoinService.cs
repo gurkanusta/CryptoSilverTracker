@@ -17,14 +17,13 @@ namespace CryptoSilverTracker.Services
 
         public async Task<List<CoinPrice>> GetPricesAsync()
         {
-            
-            var url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether,tether-gold,solana,ripple,kinesis-silver,paxg&vs_currencies=usd";
+            var url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,tether,tether-gold,solana,ripple,kinesis-silver,paxg&vs_currencies=usd&include_24hr_change=true";
             var response = await _httpClient.GetAsync(url);
 
             if (!response.IsSuccessStatusCode) return new List<CoinPrice>();
 
             var jsonString = await response.Content.ReadAsStringAsync();
-            var data = JObject.Parse(jsonString);
+            var data = Newtonsoft.Json.Linq.JObject.Parse(jsonString);
             var prices = new List<CoinPrice>();
 
             string[] coins = { "bitcoin", "ethereum", "tether", "tether-gold", "solana", "ripple", "kinesis-silver", "paxg" };
@@ -33,10 +32,15 @@ namespace CryptoSilverTracker.Services
             {
                 if (data[coin] != null)
                 {
-                    prices.Add(new CoinPrice { Id = coin, CurrentPrice = (decimal)data[coin]["usd"], Currency = "usd" });
+                    prices.Add(new CoinPrice
+                    {
+                        Id = coin,
+                        CurrentPrice = (decimal)data[coin]["usd"],
+                        Change24h = data[coin]["usd_24h_change"] != null ? (decimal)data[coin]["usd_24h_change"] : 0,
+                        Currency = "usd"
+                    });
                 }
             }
-
             return prices;
         }
 

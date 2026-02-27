@@ -1,9 +1,11 @@
-﻿namespace CryptoSilverTracker.Models
+﻿
+namespace CryptoSilverTracker.Models
 {
     public class CoinPrice
     {
-        public string Id { get; set; }      
-        public decimal CurrentPrice { get; set; } 
-        public string Currency { get; set; } 
+        public string Id { get; set; }
+        public decimal CurrentPrice { get; set; }
+        public decimal Change24h { get; set; }
+        public string Currency { get; set; }
     }
 }
